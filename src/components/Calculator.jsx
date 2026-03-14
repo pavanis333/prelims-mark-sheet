@@ -188,12 +188,10 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
                 p1Score, p2Score, p1Attempts, p2Attempts, p2Qualified,
                 totalScore: p2Qualified ? p1Score : 0,
             };
-            if (initialData) { onUpdate({ ...payload, id: initialData.id }); alert('Mock Test Updated!'); }
-            else { onSave(payload); alert('Mock Test Result Saved!'); }
+            if (initialData) { onUpdate({ ...payload, id: initialData.id }); }
+            else { onSave(payload); }
         } else {
-            if (isCustomMode && !customSubjectName.trim()) {
-                alert('Please enter a subject name.'); return;
-            }
+            if (isCustomMode && !customSubjectName.trim()) return;
             const payload = {
                 type: 'SUBJECT_TEST', date: timestamp,
                 subject: subjectName,
@@ -203,8 +201,8 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
                 score: subScore, attempts: subAttempts,
                 accuracy: subAttempts > 0 ? (subCorrect / subAttempts) * 100 : 0,
             };
-            if (initialData) { onUpdate({ ...payload, id: initialData.id }); alert('Subject Test Updated!'); }
-            else { onSave(payload); alert(`${subjectName} Test Result Saved!`); }
+            if (initialData) { onUpdate({ ...payload, id: initialData.id }); }
+            else { onSave(payload); }
         }
     };
 
