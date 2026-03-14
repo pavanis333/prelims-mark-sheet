@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import { getStoredData, saveTestResult, deleteResult, updateResult, clearData } from './lib/storage';
+import { getStoredData, saveTestResult, deleteResult, updateResult, clearData, exportData, importData } from './lib/storage';
 import Calculator from './components/Calculator';
 import Dashboard from './components/Dashboard';
 import HistoryLog from './components/HistoryLog';
@@ -57,6 +57,35 @@ function App() {
     }
   };
 
+  const handleExport = () => {
+    exportData();
+  };
+
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const mode = confirm(
+          'How do you want to import?\n\nOK = Merge with existing data (safe)\nCancel = Replace all existing data'
+        ) ? 'merge' : 'replace';
+        const result = importData(ev.target.result, mode);
+        setData(result.data || result);
+        const added = result.added ?? '?';
+        alert(mode === 'merge'
+          ? `Import successful! ${added} new test(s) added.`
+          : 'Import successful! All data replaced.'
+        );
+      } catch (err) {
+        alert(`Import failed: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+    // reset input so same file can be re-imported
+    e.target.value = '';
+  };
+
   return (
     <div className="app-container">
       <header className="header">
@@ -109,6 +138,8 @@ function App() {
             onDelete={handleDeleteResult}
             onEdit={handleEdit}
             onClearAll={handleClearAll}
+            onExport={handleExport}
+            onImport={handleImport}
           />
         )}
       </main>

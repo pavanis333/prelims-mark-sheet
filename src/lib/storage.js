@@ -80,3 +80,46 @@ export const clearData = () => {
     localStorage.removeItem(STORAGE_KEY);
     return { tests: [] };
 };
+
+// ── Export: download all data as a JSON file ──────────────────────────────
+export const exportData = () => {
+    const data = getStoredData();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href     = url;
+    a.download = `upsc-tracker-backup-${date}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+};
+
+// ── Import: merge or replace data from a JSON file ───────────────────────
+export const importData = (jsonString, mode = 'merge') => {
+    try {
+        const incoming = JSON.parse(jsonString);
+        if (!incoming?.tests || !Array.isArray(incoming.tests)) {
+            throw new Error('Invalid backup file — no tests array found.');
+        }
+
+        if (mode === 'replace') {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(incoming));
+            return getStoredData();
+        }
+
+        // merge: add only tests whose id doesn't already exist
+        const current    = getStoredData();
+        const existingIds = new Set(current.tests.map(t => t.id));
+        const newTests   = incoming.tests.filter(t => !existingIds.has(t.id));
+        const merged     = {
+            ...current,
+            tests: [...current.tests, ...newTests]
+                .sort((a, b) => new Date(b.date) - new Date(a.date)),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        return { data: getStoredData(), added: newTests.length };
+    } catch (err) {
+        throw new Error(err.message || 'Failed to parse backup file.');
+    }
+};
+
