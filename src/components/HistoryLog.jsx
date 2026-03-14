@@ -29,6 +29,9 @@ export default function HistoryLog({ data, onDelete, onEdit, onClearAll }) {
                             <span className={`tag ${test.type === 'FULL_MOCK' ? 'tag-mock' : 'tag-subject'} `}>
                                 {test.type === 'FULL_MOCK' ? 'Full Mock' : test.subject}
                             </span>
+                            {test.testName && (
+                                <span className="test-name-tag">{test.testName}</span>
+                            )}
                             <span className="date">{format(new Date(test.date), 'MMM d, h:mm a')}</span>
                         </div>
                         <div className="header-actions">
