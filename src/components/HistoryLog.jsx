@@ -16,9 +16,9 @@ export default function HistoryLog({ data, onDelete, onEdit, onClearAll }) {
     return (
         <div className="history-container fade-in">
             <div className="history-toolbar">
-                <h3>Recent Tests</h3>
+                <h3>Recent Tests <span className="history-count">{tests.length}</span></h3>
                 <button className="btn-sm danger-text" onClick={onClearAll}>
-                    <Trash2 size={14} /> Clear All History
+                    <Trash2 size={14} /> Clear All
                 </button>
             </div>
 
@@ -26,7 +26,7 @@ export default function HistoryLog({ data, onDelete, onEdit, onClearAll }) {
                 <div key={test.id} className="history-card glass-card">
                     <div className="history-header">
                         <div className="header-left">
-                            <span className={`tag ${test.type === 'FULL_MOCK' ? 'tag-mock' : 'tag-subject'} `}>
+                            <span className={`tag ${test.type === 'FULL_MOCK' ? 'tag-mock' : 'tag-subject'}`}>
                                 {test.type === 'FULL_MOCK' ? 'Full Mock' : test.subject}
                             </span>
                             {test.testName && (
@@ -34,12 +34,14 @@ export default function HistoryLog({ data, onDelete, onEdit, onClearAll }) {
                             )}
                             <span className="date">{format(new Date(test.date), 'MMM d, h:mm a')}</span>
                         </div>
+
+                        {/* Action buttons — clearly labelled */}
                         <div className="header-actions">
-                            <button className="btn-icon" onClick={() => onEdit(test)} title="Edit">
-                                <Edit2 size={16} />
+                            <button className="action-btn edit-btn" onClick={() => onEdit(test)}>
+                                <Edit2 size={13} /> Edit
                             </button>
-                            <button className="btn-icon danger" onClick={() => onDelete(test.id)} title="Delete">
-                                <Trash2 size={16} />
+                            <button className="action-btn delete-btn" onClick={() => onDelete(test.id)}>
+                                <Trash2 size={13} /> Delete
                             </button>
                         </div>
                     </div>
