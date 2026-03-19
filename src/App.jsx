@@ -1,26 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { getStoredData, saveTestResult, deleteResult, updateResult, clearData, exportData, importData } from './lib/storage';
+import { isGistConfigured, fetchFromGist, pushToGist, getGistConfig } from './lib/gistSync';
 import Calculator from './components/Calculator';
 import Dashboard from './components/Dashboard';
 import HistoryLog from './components/HistoryLog';
+import Settings from './components/Settings';
 
 function App() {
-  const [activeView, setActiveView] = useState('calculator'); // 'calculator' | 'dashboard' | 'history'
-  const [data, setData] = useState({ tests: [] });
+  const [activeView, setActiveView]   = useState('calculator');
+  const [data, setData]               = useState({ tests: [] });
   const [editingTest, setEditingTest] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [syncStatus, setSyncStatus]   = useState('idle'); // idle | syncing | synced | error
 
+  // ── On mount: load from Gist if configured, else from localStorage ──
   useEffect(() => {
-    // Reload data whenever view changes to ensure sync/migration
+    const load = async () => {
+      if (isGistConfigured()) {
+        setSyncStatus('syncing');
+        try {
+          const remote = await fetchFromGist();
+          if (remote) {
+            // Merge: remote wins (it's the source of truth)
+            localStorage.setItem('upsc_tracker_data', JSON.stringify(remote));
+            setData(remote);
+          } else {
+            setData(getStoredData());
+          }
+          setSyncStatus('synced');
+        } catch {
+          setSyncStatus('error');
+          setData(getStoredData()); // fallback to local
+        }
+      } else {
+        setData(getStoredData());
+      }
+    };
+    load();
+  }, []);
+
+  // ── Reload local data when switching views ──
+  useEffect(() => {
     const stored = getStoredData();
     setData(stored);
   }, [activeView]);
+
+  // ── Push to Gist after any write ──
+  const syncToGist = useCallback(async (newData) => {
+    if (!isGistConfigured()) return;
+    setSyncStatus('syncing');
+    try {
+      await pushToGist(newData);
+      setSyncStatus('synced');
+    } catch {
+      setSyncStatus('error');
+    }
+  }, []);
 
   const handleSaveResult = (result) => {
     const newData = saveTestResult(result);
     if (newData) {
       setData(newData);
-      setActiveView('dashboard'); // Auto switch to dashboard to show progress
+      syncToGist(newData);
+      setActiveView('dashboard');
     }
   };
 
@@ -29,14 +72,18 @@ function App() {
     if (newData) {
       setData(newData);
       setEditingTest(null);
+      syncToGist(newData);
       setActiveView('dashboard');
     }
   };
 
   const handleDeleteResult = (id) => {
-    if (confirm('Are you sure you want to delete this result?')) {
+    if (confirm('Delete this result?')) {
       const newData = deleteResult(id);
-      if (newData) setData(newData);
+      if (newData) {
+        setData(newData);
+        syncToGist(newData);
+      }
     }
   };
 
@@ -47,19 +94,18 @@ function App() {
 
   const handleCancelEdit = () => {
     setEditingTest(null);
-    setActiveView('history'); // Go back to history
+    setActiveView('history');
   };
 
   const handleClearAll = () => {
     if (confirm('WARNING: This will delete ALL your test history. This action cannot be undone.\n\nAre you sure?')) {
       const newData = clearData();
       setData(newData);
+      syncToGist(newData);
     }
   };
 
-  const handleExport = () => {
-    exportData();
-  };
+  const handleExport = () => exportData();
 
   const handleImport = (e) => {
     const file = e.target.files[0];
@@ -71,20 +117,30 @@ function App() {
           'How do you want to import?\n\nOK = Merge with existing data (safe)\nCancel = Replace all existing data'
         ) ? 'merge' : 'replace';
         const result = importData(ev.target.result, mode);
-        setData(result.data || result);
-        const added = result.added ?? '?';
-        alert(mode === 'merge'
-          ? `Import successful! ${added} new test(s) added.`
-          : 'Import successful! All data replaced.'
-        );
+        const newData = result.data || result;
+        setData(newData);
+        syncToGist(newData);
       } catch (err) {
         alert(`Import failed: ${err.message}`);
       }
     };
     reader.readAsText(file);
-    // reset input so same file can be re-imported
     e.target.value = '';
   };
+
+  // Called by Settings when manual sync pulls remote data
+  const handleDataSync = (remote) => {
+    localStorage.setItem('upsc_tracker_data', JSON.stringify(remote));
+    setData(remote);
+  };
+
+  // Sync status pill
+  const syncLabel = {
+    idle:    null,
+    syncing: { text: '↻ Syncing',    cls: 'sync-syncing' },
+    synced:  { text: '✓ Synced',     cls: 'sync-synced'  },
+    error:   { text: '⚠ Sync error', cls: 'sync-error'   },
+  }[syncStatus];
 
   return (
     <div className="app-container">
@@ -94,44 +150,47 @@ function App() {
           <h1>UPSC Prelims Tracker</h1>
         </div>
 
-        {/* Main Navigation */}
         <nav className="nav-tabs">
-          <button
-            className={`nav-item ${activeView === 'calculator' ? 'active' : ''}`}
-            onClick={() => { setActiveView('calculator'); setEditingTest(null); }}
-          >
+          <button className={`nav-item ${activeView === 'calculator' ? 'active' : ''}`}
+            onClick={() => { setActiveView('calculator'); setEditingTest(null); }}>
             Calculator
           </button>
-          <button
-            className={`nav-item ${activeView === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setActiveView('dashboard')}
-          >
+          <button className={`nav-item ${activeView === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveView('dashboard')}>
             Dashboard
           </button>
-          <button
-            className={`nav-item ${activeView === 'history' ? 'active' : ''}`}
-            onClick={() => setActiveView('history')}
-          >
+          <button className={`nav-item ${activeView === 'history' ? 'active' : ''}`}
+            onClick={() => setActiveView('history')}>
             History
           </button>
         </nav>
+
+        {/* Sync status + Settings */}
+        <div className="header-right">
+          {syncLabel && (
+            <span className={`sync-pill ${syncLabel.cls}`}>{syncLabel.text}</span>
+          )}
+          <button
+            className={`settings-btn ${isGistConfigured() ? 'settings-btn-active' : ''}`}
+            onClick={() => setShowSettings(true)}
+            title="Settings / Gist Sync"
+          >
+            ⚙️ {isGistConfigured() ? getGistConfig()?.username : 'Sync'}
+          </button>
+        </div>
       </header>
 
       <main className="content-area">
         {activeView === 'calculator' && (
           <Calculator
-            key={editingTest ? editingTest.id : 'new'} // Force re-render on edit switch
+            key={editingTest ? editingTest.id : 'new'}
             onSave={handleSaveResult}
             onUpdate={handleUpdateResult}
             initialData={editingTest}
             onCancelEdit={handleCancelEdit}
           />
         )}
-
-        {activeView === 'dashboard' && (
-          <Dashboard data={data} />
-        )}
-
+        {activeView === 'dashboard' && <Dashboard data={data} />}
         {activeView === 'history' && (
           <HistoryLog
             data={data}
@@ -147,6 +206,10 @@ function App() {
       <footer className="footer">
         <p>Stay Consistent. Stay Focused. <span className="highlight-text">You Got This.</span></p>
       </footer>
+
+      {showSettings && (
+        <Settings onClose={() => setShowSettings(false)} onDataSync={handleDataSync} />
+      )}
     </div>
   );
 }
