@@ -81,6 +81,7 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
     const [p1Incorrect, setP1Incorrect] = useState(p1Stats.i);
     const [p2Correct, setP2Correct]     = useState(p2Stats.c);
     const [p2Incorrect, setP2Incorrect] = useState(p2Stats.i);
+    const [mockTestName, setMockTestName] = useState(initialData?.testName || '');
 
     const p1Attempts  = p1Correct + p1Incorrect;
     const p2Attempts  = p2Correct + p2Incorrect;
@@ -134,6 +135,7 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
         if (activeTab === 'full') {
             const payload = {
                 type: 'FULL_MOCK', date: timestamp,
+                testName: mockTestName.trim() || null,
                 p1Correct, p1Incorrect, p2Correct, p2Incorrect,
                 p1Score, p2Score, p1Attempts, p2Attempts, p2Qualified,
                 totalScore: p2Qualified ? p1Score : 0,
@@ -168,6 +170,22 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
             {/* ════════════════ FULL MOCK ════════════════ */}
             {activeTab === 'full' && (
                 <div className="grid-container">
+
+                    {/* Test name — spans full width */}
+                    <div className="full-mock-test-name">
+                        <label className="test-name-label">
+                            Mock Test Name <span className="optional-hint">(optional)</span>
+                        </label>
+                        <input
+                            type="text"
+                            className="test-name-input"
+                            value={mockTestName}
+                            onChange={e => setMockTestName(e.target.value)}
+                            placeholder="e.g. Drishti Mock 5, Vision IAS Full Test…"
+                            maxLength={80}
+                        />
+                    </div>
+
                     {/* GS Paper I */}
                     <section className="glass-card paper-card">
                         <div className="card-header">
