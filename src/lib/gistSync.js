@@ -22,7 +22,7 @@ export const clearGistConfig = () =>
 
 export const isGistConfigured = () => !!getGistConfig()?.pat;
 
-// Validate PAT and return GitHub username
+// ── Validate PAT → returns GitHub username ──
 export const validatePAT = async (pat) => {
     const res = await fetch('https://api.github.com/user', {
         headers: authHeaders(pat),
@@ -32,15 +32,67 @@ export const validatePAT = async (pat) => {
     return user.login;
 };
 
-// Fetch data from Gist → returns parsed JS object or null
+// ── Find existing tracker Gist by scanning user's gists ──────────────────────
+// Returns gistId string or null if not found
+export const findTrackerGist = async (pat) => {
+    let page = 1;
+    while (true) {
+        const res = await fetch(`https://api.github.com/gists?per_page=100&page=${page}`, {
+            headers: authHeaders(pat),
+        });
+        if (!res.ok) throw new Error(`Could not list gists (${res.status})`);
+        const gists = await res.json();
+        if (gists.length === 0) break;
+
+        const match = gists.find(g => g.files && g.files[GIST_FILENAME]);
+        if (match) return match.id;
+
+        if (gists.length < 100) break; // last page
+        page++;
+    }
+    return null;
+};
+
+// ── Connect: validate PAT + auto-discover existing Gist ──────────────────────
+// Returns { username, gistId (or null), data (or null) }
+export const connectAndDiscover = async (pat) => {
+    const username = await validatePAT(pat);
+    const gistId   = await findTrackerGist(pat);
+
+    let data = null;
+    if (gistId) {
+        // fetch content from the discovered gist
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+            headers: authHeaders(pat),
+        });
+        if (res.ok) {
+            const gist    = await res.json();
+            const content = gist.files?.[GIST_FILENAME]?.content;
+            if (content) data = JSON.parse(content);
+        }
+    }
+
+    setGistConfig({ pat, username, gistId, lastSync: data ? new Date().toISOString() : null });
+    return { username, gistId, data };
+};
+
+// ── Fetch data from stored Gist ───────────────────────────────────────────────
 export const fetchFromGist = async () => {
     const config = getGistConfig();
-    if (!config?.pat || !config?.gistId) return null;
+    if (!config?.pat) return null;
 
-    const res = await fetch(`https://api.github.com/gists/${config.gistId}`, {
-        headers: authHeaders(config.pat),
+    // If no gistId stored yet, try to discover it first
+    if (!config.gistId) {
+        const gistId = await findTrackerGist(config.pat);
+        if (!gistId) return null;
+        setGistConfig({ ...config, gistId });
+    }
+
+    const { gistId, pat } = getGistConfig();
+    const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: authHeaders(pat),
     });
-    if (res.status === 404) { return null; }
+    if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Gist fetch failed (${res.status})`);
 
     const gist    = await res.json();
@@ -49,7 +101,7 @@ export const fetchFromGist = async () => {
     return JSON.parse(content);
 };
 
-// Push data to Gist — creates on first call, patches after
+// ── Push data to Gist — creates on first call, patches after ─────────────────
 export const pushToGist = async (data) => {
     const config = getGistConfig();
     if (!config?.pat) return;
@@ -57,7 +109,6 @@ export const pushToGist = async (data) => {
     const content = JSON.stringify(data, null, 2);
 
     if (!config.gistId) {
-        // First time — create a new secret Gist
         const res = await fetch('https://api.github.com/gists', {
             method: 'POST',
             headers: authHeaders(config.pat),
@@ -69,9 +120,8 @@ export const pushToGist = async (data) => {
         });
         if (!res.ok) throw new Error(`Gist create failed (${res.status})`);
         const gist = await res.json();
-        setGistConfig({ ...config, gistId: gist.id });
+        setGistConfig({ ...getGistConfig(), gistId: gist.id, lastSync: new Date().toISOString() });
     } else {
-        // Update existing Gist
         const res = await fetch(`https://api.github.com/gists/${config.gistId}`, {
             method: 'PATCH',
             headers: authHeaders(config.pat),
@@ -80,8 +130,6 @@ export const pushToGist = async (data) => {
             }),
         });
         if (!res.ok) throw new Error(`Gist update failed (${res.status})`);
+        setGistConfig({ ...getGistConfig(), lastSync: new Date().toISOString() });
     }
-
-    // Record last sync time
-    setGistConfig({ ...getGistConfig(), lastSync: new Date().toISOString() });
 };

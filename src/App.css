@@ -199,6 +199,15 @@
   font-family: monospace;
 }
 
+.sync-ok-msg {
+  font-size: 0.8rem;
+  color: #4ade80;
+  background: rgba(74,222,128,0.08);
+  border: 1px solid rgba(74,222,128,0.2);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}
+
 /* Spin animation for sync icon */
 @keyframes spin {
   to { transform: rotate(360deg); }

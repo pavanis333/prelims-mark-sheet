@@ -1,28 +1,40 @@
-import React, { useState, useEffect } from 'react';
-import { X, Link, LogOut, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { X, LogOut, RefreshCw, CheckCircle, AlertCircle, Link } from 'lucide-react';
 import {
     getGistConfig, setGistConfig, clearGistConfig,
-    validatePAT, fetchFromGist, pushToGist,
+    connectAndDiscover, fetchFromGist,
 } from '../lib/gistSync';
 
 export default function Settings({ onClose, onDataSync }) {
     const config = getGistConfig();
 
-    const [pat, setPat]             = useState('');
-    const [status, setStatus]       = useState('idle'); // idle | validating | connected | error
-    const [username, setUsername]   = useState(config?.username || '');
-    const [errorMsg, setErrorMsg]   = useState('');
-    const [lastSync, setLastSync]   = useState(config?.lastSync || null);
-    const isConnected               = !!(config?.pat);
+    const [pat, setPat]           = useState('');
+    const [status, setStatus]     = useState('idle'); // idle | connecting | connected | syncing | error
+    const [username, setUsername] = useState(config?.username || '');
+    const [errorMsg, setErrorMsg] = useState('');
+    const [lastSync, setLastSync] = useState(config?.lastSync || null);
+    const [syncMsg, setSyncMsg]   = useState('');
+    const isConnected             = !!config?.pat;
 
     const handleConnect = async () => {
         if (!pat.trim()) return;
-        setStatus('validating');
+        setStatus('connecting');
         setErrorMsg('');
+        setSyncMsg('');
         try {
-            const login = await validatePAT(pat.trim());
-            setGistConfig({ pat: pat.trim(), username: login, gistId: config?.gistId || null });
+            const { username: login, gistId, data } = await connectAndDiscover(pat.trim());
             setUsername(login);
+
+            if (data) {
+                onDataSync(data);
+                const now = new Date().toISOString();
+                setLastSync(now);
+                setSyncMsg(`Found existing Gist — ${data.tests?.length ?? 0} test(s) loaded ✓`);
+            } else if (gistId) {
+                setSyncMsg('Connected to existing Gist. No data found.');
+            } else {
+                setSyncMsg('Connected. A new Gist will be created on your first save.');
+            }
             setStatus('connected');
         } catch (err) {
             setStatus('error');
@@ -31,24 +43,30 @@ export default function Settings({ onClose, onDataSync }) {
     };
 
     const handleDisconnect = () => {
-        if (confirm('Disconnect GitHub Gist sync? Your local data stays, but changes will no longer sync.')) {
+        if (confirm('Disconnect GitHub Gist sync? Your local data stays, but changes will no longer sync to GitHub.')) {
             clearGistConfig();
             setUsername('');
             setStatus('idle');
             setPat('');
+            setSyncMsg('');
         }
     };
 
     const handleManualSync = async () => {
         setStatus('syncing');
         setErrorMsg('');
+        setSyncMsg('');
         try {
             const remote = await fetchFromGist();
             if (remote) {
                 onDataSync(remote);
+                const now = new Date().toISOString();
+                setGistConfig({ ...getGistConfig(), lastSync: now });
+                setLastSync(now);
+                setSyncMsg(`Synced — ${remote.tests?.length ?? 0} test(s) loaded ✓`);
+            } else {
+                setSyncMsg('No data found in Gist.');
             }
-            setLastSync(new Date().toISOString());
-            setGistConfig({ ...getGistConfig(), lastSync: new Date().toISOString() });
             setStatus('connected');
         } catch (err) {
             setStatus('error');
@@ -58,9 +76,10 @@ export default function Settings({ onClose, onDataSync }) {
 
     const formatSync = (iso) => {
         if (!iso) return 'Never';
-        const d = new Date(iso);
-        return d.toLocaleString();
+        return new Date(iso).toLocaleString();
     };
+
+    const isBusy = status === 'connecting' || status === 'syncing';
 
     return (
         <div className="settings-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -73,31 +92,35 @@ export default function Settings({ onClose, onDataSync }) {
                 <section className="settings-section">
                     <h3>GitHub Gist Sync</h3>
                     <p className="settings-desc">
-                        Your data is saved to a <strong>secret GitHub Gist</strong> automatically.
-                        Syncs across all your devices — just enter your PAT once per device.
+                        Data is saved to a <strong>secret GitHub Gist</strong> automatically.
+                        Enter your PAT on any device — the app auto-discovers your existing data.
                     </p>
 
                     {isConnected ? (
                         <div className="connected-box">
                             <div className="connected-row">
                                 <CheckCircle size={18} color="#4ade80" />
-                                <span>Connected as <strong>{username || getGistConfig()?.username}</strong></span>
+                                <span>Connected as <strong>{config?.username}</strong></span>
                             </div>
                             <div className="sync-meta">
-                                Last synced: {formatSync(lastSync || getGistConfig()?.lastSync)}
+                                Gist ID: <code style={{ fontSize: '0.7rem', opacity: 0.6 }}>{config?.gistId || 'will be created on first save'}</code>
                             </div>
+                            <div className="sync-meta">
+                                Last synced: {formatSync(lastSync || config?.lastSync)}
+                            </div>
+                            {syncMsg && <div className="sync-ok-msg">✓ {syncMsg}</div>}
+                            {status === 'error' && (
+                                <div className="settings-error"><AlertCircle size={14} /> {errorMsg}</div>
+                            )}
                             <div className="settings-actions">
-                                <button className="btn-sm" onClick={handleManualSync} disabled={status === 'syncing'}>
+                                <button className="btn-sm" onClick={handleManualSync} disabled={isBusy}>
                                     <RefreshCw size={13} className={status === 'syncing' ? 'spin' : ''} />
-                                    {status === 'syncing' ? 'Syncing…' : 'Sync Now'}
+                                    {status === 'syncing' ? 'Syncing…' : 'Pull from Gist'}
                                 </button>
                                 <button className="btn-sm danger-text" onClick={handleDisconnect}>
                                     <LogOut size={13} /> Disconnect
                                 </button>
                             </div>
-                            {status === 'error' && (
-                                <div className="settings-error"><AlertCircle size={14} /> {errorMsg}</div>
-                            )}
                         </div>
                     ) : (
                         <div className="pat-form">
@@ -116,23 +139,27 @@ export default function Settings({ onClose, onDataSync }) {
                                 className="pat-input"
                                 value={pat}
                                 onChange={e => setPat(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && handleConnect()}
+                                onKeyDown={e => e.key === 'Enter' && !isBusy && handleConnect()}
                                 placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
                                 autoFocus
                             />
                             <p className="pat-hint">
-                                Only needs <code>gist</code> scope. Stored locally on this device only.
+                                Only needs <code>gist</code> scope. On connect, the app automatically
+                                finds your existing Gist and loads your data.
                             </p>
                             {status === 'error' && (
                                 <div className="settings-error"><AlertCircle size={14} /> {errorMsg}</div>
                             )}
+                            {syncMsg && <div className="sync-ok-msg">{syncMsg}</div>}
                             <button
                                 className="btn-save"
                                 onClick={handleConnect}
-                                disabled={!pat.trim() || status === 'validating'}
+                                disabled={!pat.trim() || isBusy}
                                 style={{ marginTop: '0.75rem' }}
                             >
-                                {status === 'validating' ? 'Connecting…' : 'Connect'}
+                                {isBusy ? (
+                                    <><RefreshCw size={15} className="spin" /> Connecting…</>
+                                ) : 'Connect & Sync'}
                             </button>
                         </div>
                     )}
