@@ -11,37 +11,52 @@ import { SUBJECTS, SUBJECT_COLORS, normaliseSub } from './Calculator';
 export default function Dashboard({ data }) {
     const { tests } = data;
 
-    const fullMocks = useMemo(() =>
-        tests.filter(t => t.type === 'FULL_MOCK').reverse(), [tests]);
-
-    const subjectTests = useMemo(() =>
-        tests.filter(t => t.type === 'SUBJECT_TEST'), [tests]);
-
-    const normalisedSubjectTests = useMemo(() =>
-        subjectTests.map(t => ({ ...t, subject: normaliseSub(t.subject) })),
-        [subjectTests]);
+    const allTests = useMemo(() =>
+        tests.map(t => {
+            // migrate old FULL_MOCK entries → treat as GS Paper I subject test
+            if (t.type === 'FULL_MOCK') {
+                return {
+                    ...t,
+                    type: 'SUBJECT_TEST',
+                    subject: 'GS Paper I',
+                    score: t.p1Score ?? 0,
+                    subCorrect: t.p1Correct,
+                    subIncorrect: t.p1Incorrect,
+                    attempts: t.p1Attempts ?? 0,
+                    accuracy: t.p1Attempts > 0 ? (t.p1Correct / t.p1Attempts) * 100 : 0,
+                };
+            }
+            return { ...t, subject: normaliseSub(t.subject) };
+        }),
+        [tests]
+    );
 
     // Stats
-    const bestMockScore = fullMocks.length > 0 ? Math.max(...fullMocks.map(t => t.p1Score)) : 0;
-    const avgMockScore  = fullMocks.length > 0
-        ? (fullMocks.reduce((a, t) => a + t.p1Score, 0) / fullMocks.length).toFixed(1) : 0;
+    const gsTests = useMemo(() => allTests.filter(t => t.subject === 'GS Paper I'), [allTests]);
+    const bestGS  = gsTests.length > 0 ? Math.max(...gsTests.map(t => t.score)) : 0;
+    const avgGS   = gsTests.length > 0
+        ? (gsTests.reduce((a, t) => a + t.score, 0) / gsTests.length).toFixed(1) : 0;
     const subjectsCovered = useMemo(() =>
-        new Set(normalisedSubjectTests.map(t => t.subject)).size, [normalisedSubjectTests]);
+        new Set(allTests.map(t => t.subject)).size, [allTests]);
 
-    // Mock trend
-    const trendData = fullMocks.map((t, i) => ({
-        name: `Mock ${i + 1}`,
-        date: format(new Date(t.date), 'MMM d'),
-        score: parseFloat(t.p1Score.toFixed(2)),
-    }));
+    // GS Paper I trend
+    const trendData = useMemo(() =>
+        [...gsTests].reverse().map((t, i) => ({
+            name: `Test ${i + 1}`,
+            date: format(new Date(t.date), 'MMM d'),
+            score: parseFloat(t.score.toFixed(2)),
+        })),
+        [gsTests]
+    );
 
     // Per-subject aggregation
     const subjectPerformance = useMemo(() => {
         const grouped = {};
-        normalisedSubjectTests.forEach(t => {
-            if (!grouped[t.subject]) grouped[t.subject] = { total: 0, count: 0 };
-            grouped[t.subject].total += t.score;
-            grouped[t.subject].count += 1;
+        allTests.forEach(t => {
+            const sub = t.subject;
+            if (!grouped[sub]) grouped[sub] = { total: 0, count: 0 };
+            grouped[sub].total += t.score ?? 0;
+            grouped[sub].count += 1;
         });
         return SUBJECTS.map(sub => {
             const g = grouped[sub];
@@ -51,21 +66,21 @@ export default function Dashboard({ data }) {
                 count: g ? g.count : 0,
                 covered: !!g,
                 color: (SUBJECT_COLORS[sub] || {}).color || '#94a3b8',
-                bg: (SUBJECT_COLORS[sub] || {}).bg || 'rgba(148,163,184,0.15)',
+                bg:    (SUBJECT_COLORS[sub] || {}).bg    || 'rgba(148,163,184,0.15)',
             };
         });
-    }, [normalisedSubjectTests]);
+    }, [allTests]);
 
-    const coveredSubjects = subjectPerformance.filter(s => s.covered && s.name !== 'CSAT');
-    const weakSubjects    = coveredSubjects.filter(s => s.avg < 40);
-    const strongSubjects  = coveredSubjects.filter(s => s.avg >= 60);
+    const coveredSubjects = subjectPerformance.filter(s => s.covered && s.name !== 'CSAT Paper II');
+    const weakSubjects    = coveredSubjects.filter(s => s.avg !== null && s.avg < 40);
+    const strongSubjects  = coveredSubjects.filter(s => s.avg !== null && s.avg >= 60);
 
     if (tests.length === 0) {
         return (
             <div className="empty-state glass-card">
                 <Activity size={48} className="empty-icon" />
                 <h3>No Data Available</h3>
-                <p>Take your first mock test to see analytics.</p>
+                <p>Save your first test result to see analytics.</p>
             </div>
         );
     }
@@ -79,14 +94,14 @@ export default function Dashboard({ data }) {
                     <div className="metric-icon"><Award size={24} /></div>
                     <div className="metric-info">
                         <span className="label">Best GS Score</span>
-                        <span className="value text-highlight">{bestMockScore.toFixed(2)}</span>
+                        <span className="value text-highlight">{bestGS.toFixed ? bestGS.toFixed(2) : bestGS}</span>
                     </div>
                 </div>
                 <div className="metric-card glass-card">
                     <div className="metric-icon"><TrendingUp size={24} /></div>
                     <div className="metric-info">
                         <span className="label">Avg GS Score</span>
-                        <span className="value">{avgMockScore}</span>
+                        <span className="value">{avgGS}</span>
                     </div>
                 </div>
                 <div className="metric-card glass-card">
@@ -110,9 +125,7 @@ export default function Dashboard({ data }) {
                 <div className="category-alerts-row">
                     {weakSubjects.length > 0 && (
                         <div className="alert-card alert-weak glass-card">
-                            <div className="alert-header">
-                                <AlertTriangle size={18} /> Needs Attention
-                            </div>
+                            <div className="alert-header"><AlertTriangle size={18} /> Needs Attention</div>
                             <div className="alert-tags">
                                 {weakSubjects.map(s => (
                                     <span key={s.name} className="alert-tag"
@@ -125,9 +138,7 @@ export default function Dashboard({ data }) {
                     )}
                     {strongSubjects.length > 0 && (
                         <div className="alert-card alert-strong glass-card">
-                            <div className="alert-header">
-                                <CheckCircle size={18} /> Strong Areas
-                            </div>
+                            <div className="alert-header"><CheckCircle size={18} /> Strong Areas</div>
                             <div className="alert-tags">
                                 {strongSubjects.map(s => (
                                     <span key={s.name} className="alert-tag"
@@ -141,7 +152,7 @@ export default function Dashboard({ data }) {
                 </div>
             )}
 
-            {/* ── Subject Score Cards ── */}
+            {/* ── Subject Overview Cards ── */}
             <section className="chart-section glass-card">
                 <h3>Subject Overview</h3>
                 <div className="subject-score-grid">
@@ -165,10 +176,10 @@ export default function Dashboard({ data }) {
                 </div>
             </section>
 
-            {/* ── Mock Trend ── */}
-            {fullMocks.length > 0 && (
+            {/* ── GS Paper I Trend ── */}
+            {gsTests.length > 0 && (
                 <section className="chart-section glass-card">
-                    <h3>Full Mock — GS Paper I Trend</h3>
+                    <h3>GS Paper I — Score Trend</h3>
                     <div className="chart-wrapper">
                         <ResponsiveContainer width="100%" height={280}>
                             <AreaChart data={trendData}>
