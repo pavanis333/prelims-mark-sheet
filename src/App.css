@@ -9,6 +9,32 @@
   gap: 2rem;
   align-items: center;
 
+/* ── Sync error banner ── */
+.sync-error-banner {
+  width: 100%;
+  background: rgba(248,113,113,0.1);
+  border: 1px solid rgba(248,113,113,0.3);
+  border-radius: 0.5rem;
+  padding: 0.65rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: #fca5a5;
+}
+
+.sync-error-banner span { flex: 1; }
+
+.sync-banner-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.4rem;
+}
+.sync-banner-close:hover { color: #fff; }
+
 /* ── Header right: sync pill + settings button ── */
 .header-right {
   display: flex;

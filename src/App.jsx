@@ -8,13 +8,14 @@ import HistoryLog from './components/HistoryLog';
 import Settings from './components/Settings';
 
 function App() {
-  const [activeView, setActiveView]   = useState('calculator');
-  const [data, setData]               = useState({ tests: [] });
-  const [editingTest, setEditingTest] = useState(null);
+  const [activeView, setActiveView]     = useState('calculator');
+  const [data, setData]                 = useState({ tests: [] });
+  const [editingTest, setEditingTest]   = useState(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [syncStatus, setSyncStatus]   = useState('idle'); // idle | syncing | synced | error
+  const [syncStatus, setSyncStatus]     = useState('idle'); // idle|syncing|synced|error
+  const [syncError, setSyncError]       = useState('');
 
-  // ── On mount: load from Gist if configured, else from localStorage ──
+  // ── On mount: load from Gist if configured ──
   useEffect(() => {
     const load = async () => {
       if (isGistConfigured()) {
@@ -22,16 +23,16 @@ function App() {
         try {
           const remote = await fetchFromGist();
           if (remote) {
-            // Merge: remote wins (it's the source of truth)
             localStorage.setItem('upsc_tracker_data', JSON.stringify(remote));
             setData(remote);
           } else {
             setData(getStoredData());
           }
           setSyncStatus('synced');
-        } catch {
+        } catch (err) {
           setSyncStatus('error');
-          setData(getStoredData()); // fallback to local
+          setSyncError(err.message);
+          setData(getStoredData());
         }
       } else {
         setData(getStoredData());
@@ -42,19 +43,20 @@ function App() {
 
   // ── Reload local data when switching views ──
   useEffect(() => {
-    const stored = getStoredData();
-    setData(stored);
+    setData(getStoredData());
   }, [activeView]);
 
-  // ── Push to Gist after any write ──
+  // ── Push to Gist — always await and surface errors ──
   const syncToGist = useCallback(async (newData) => {
     if (!isGistConfigured()) return;
     setSyncStatus('syncing');
+    setSyncError('');
     try {
       await pushToGist(newData);
       setSyncStatus('synced');
-    } catch {
+    } catch (err) {
       setSyncStatus('error');
+      setSyncError(err.message || 'Sync failed — click ⚙️ to retry');
     }
   }, []);
 
@@ -72,7 +74,7 @@ function App() {
     if (newData) {
       setData(newData);
       setEditingTest(null);
-      syncToGist(newData);
+      syncToGist(newData);   // push updated data
       setActiveView('dashboard');
     }
   };
@@ -114,7 +116,7 @@ function App() {
     reader.onload = (ev) => {
       try {
         const mode = confirm(
-          'How do you want to import?\n\nOK = Merge with existing data (safe)\nCancel = Replace all existing data'
+          'How do you want to import?\n\nOK = Merge  |  Cancel = Replace all'
         ) ? 'merge' : 'replace';
         const result = importData(ev.target.result, mode);
         const newData = result.data || result;
@@ -128,18 +130,25 @@ function App() {
     e.target.value = '';
   };
 
-  // Called by Settings when manual sync pulls remote data
+  // Called by Settings after a manual pull or fresh connect
   const handleDataSync = (remote) => {
     localStorage.setItem('upsc_tracker_data', JSON.stringify(remote));
     setData(remote);
+    setSyncStatus('synced');
+    setSyncError('');
   };
 
-  // Sync status pill
+  // Called by Settings "Push Now" button
+  const handleForcePush = async () => {
+    const current = getStoredData();
+    await syncToGist(current);
+  };
+
   const syncLabel = {
     idle:    null,
-    syncing: { text: '↻ Syncing',    cls: 'sync-syncing' },
-    synced:  { text: '✓ Synced',     cls: 'sync-synced'  },
-    error:   { text: '⚠ Sync error', cls: 'sync-error'   },
+    syncing: { text: '↻ Syncing…',   cls: 'sync-syncing' },
+    synced:  { text: '✓ Synced',      cls: 'sync-synced'  },
+    error:   { text: '⚠ Sync failed', cls: 'sync-error'   },
   }[syncStatus];
 
   return (
@@ -165,10 +174,14 @@ function App() {
           </button>
         </nav>
 
-        {/* Sync status + Settings */}
         <div className="header-right">
           {syncLabel && (
-            <span className={`sync-pill ${syncLabel.cls}`}>{syncLabel.text}</span>
+            <span
+              className={`sync-pill ${syncLabel.cls}`}
+              title={syncStatus === 'error' ? syncError : ''}
+            >
+              {syncLabel.text}
+            </span>
           )}
           <button
             className={`settings-btn ${isGistConfigured() ? 'settings-btn-active' : ''}`}
@@ -179,6 +192,15 @@ function App() {
           </button>
         </div>
       </header>
+
+      {/* Sync error banner */}
+      {syncStatus === 'error' && syncError && (
+        <div className="sync-error-banner">
+          <span>⚠ {syncError}</span>
+          <button className="btn-sm" onClick={handleForcePush}>Retry</button>
+          <button className="sync-banner-close" onClick={() => { setSyncStatus('idle'); setSyncError(''); }}>✕</button>
+        </div>
+      )}
 
       <main className="content-area">
         {activeView === 'calculator' && (
@@ -208,7 +230,12 @@ function App() {
       </footer>
 
       {showSettings && (
-        <Settings onClose={() => setShowSettings(false)} onDataSync={handleDataSync} />
+        <Settings
+          onClose={() => setShowSettings(false)}
+          onDataSync={handleDataSync}
+          onForcePush={handleForcePush}
+          currentData={data}
+        />
       )}
     </div>
   );

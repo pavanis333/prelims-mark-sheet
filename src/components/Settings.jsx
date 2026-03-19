@@ -5,7 +5,7 @@ import {
     connectAndDiscover, fetchFromGist,
 } from '../lib/gistSync';
 
-export default function Settings({ onClose, onDataSync }) {
+export default function Settings({ onClose, onDataSync, onForcePush, currentData }) {
     const config = getGistConfig();
 
     const [pat, setPat]           = useState('');
@@ -116,6 +116,14 @@ export default function Settings({ onClose, onDataSync }) {
                                 <button className="btn-sm" onClick={handleManualSync} disabled={isBusy}>
                                     <RefreshCw size={13} className={status === 'syncing' ? 'spin' : ''} />
                                     {status === 'syncing' ? 'Syncing…' : 'Pull from Gist'}
+                                </button>
+                                <button className="btn-sm" onClick={async () => {
+                                    setStatus('syncing'); setSyncMsg('');
+                                    try { await onForcePush(); setSyncMsg('Pushed to Gist ✓'); setStatus('connected'); }
+                                    catch (e) { setStatus('error'); setErrorMsg(e.message); }
+                                }} disabled={isBusy}>
+                                    <RefreshCw size={13} />
+                                    Push Now
                                 </button>
                                 <button className="btn-sm danger-text" onClick={handleDisconnect}>
                                     <LogOut size={13} /> Disconnect
