@@ -11,7 +11,6 @@ export const SUBJECTS = [
     'Economy',
     'Geography',
     'Polity',
-    'CSAT',
 ];
 
 export const SUBJECT_COLORS = {
@@ -101,14 +100,13 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
 
     const isCustomMode = selectedOption === '__custom__';
     const subjectName  = isCustomMode ? (customSubjectName.trim() || 'Custom') : selectedOption;
-    const isCSAT       = subjectName === 'CSAT';
-    const marksPerQ    = isCSAT ? 2.5 : 2;
-    const negativePerQ = isCSAT ? 2.5 / 3 : 2 / 3;
+    const marksPerQ    = 2;
+    const negativePerQ = 2 / 3;
 
     const handleSubjectChange = (val) => {
         setSelectedOption(val);
         if (val !== '__custom__') setCustomSubjectName('');
-        setTotalQuestions(val === 'CSAT' ? 80 : 50);
+        setTotalQuestions(50);
     };
 
     const subStats = recoverStats(
@@ -300,7 +298,6 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
 
                         <div className="subject-pill" style={{ background: subStyle.bg, color: subStyle.color }}>
                             {subjectName === 'AMAC' ? 'Ancient · Medieval · Art & Culture' : subjectName}
-                            {isCSAT   && ' · Qualifying Paper'}
                             {isCustomMode && ' · Custom Subject'}
                         </div>
 
