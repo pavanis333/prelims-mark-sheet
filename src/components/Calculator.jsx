@@ -11,21 +11,19 @@ export const SUBJECTS = [
     'Economy',
     'Geography',
     'Polity',
-    'Full GS (Paper I)',   // full mock GS as a subject category
     'CSAT',
 ];
 
 export const SUBJECT_COLORS = {
-    'AMAC':               { bg: 'rgba(251,146,60,0.15)',  color: '#fb923c' },
-    'Modern History':     { bg: 'rgba(250,204,21,0.15)',  color: '#facc15' },
-    'Environment':        { bg: 'rgba(74,222,128,0.15)',  color: '#4ade80' },
-    'Science & Tech':     { bg: 'rgba(192,132,252,0.15)', color: '#c084fc' },
-    'Economy':            { bg: 'rgba(251,191,36,0.15)',  color: '#fbbf24' },
-    'Geography':          { bg: 'rgba(52,211,153,0.15)',  color: '#34d399' },
-    'Polity':             { bg: 'rgba(96,165,250,0.15)',  color: '#60a5fa' },
-    'Full GS (Paper I)':  { bg: 'rgba(202,138,4,0.15)',   color: '#ca8a04' },
-    'CSAT':               { bg: 'rgba(244,114,182,0.15)', color: '#f472b6' },
-    '__custom__':         { bg: 'rgba(148,163,184,0.15)', color: '#94a3b8' },
+    'AMAC':           { bg: 'rgba(251,146,60,0.15)',  color: '#fb923c' },
+    'Modern History': { bg: 'rgba(250,204,21,0.15)',  color: '#facc15' },
+    'Environment':    { bg: 'rgba(74,222,128,0.15)',  color: '#4ade80' },
+    'Science & Tech': { bg: 'rgba(192,132,252,0.15)', color: '#c084fc' },
+    'Economy':        { bg: 'rgba(251,191,36,0.15)',  color: '#fbbf24' },
+    'Geography':      { bg: 'rgba(52,211,153,0.15)',  color: '#34d399' },
+    'Polity':         { bg: 'rgba(96,165,250,0.15)',  color: '#60a5fa' },
+    'CSAT':           { bg: 'rgba(244,114,182,0.15)', color: '#f472b6' },
+    '__custom__':     { bg: 'rgba(148,163,184,0.15)', color: '#94a3b8' },
 };
 
 const getSubStyle = (name) => SUBJECT_COLORS[name] || SUBJECT_COLORS['__custom__'];
@@ -103,22 +101,14 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
 
     const isCustomMode = selectedOption === '__custom__';
     const subjectName  = isCustomMode ? (customSubjectName.trim() || 'Custom') : selectedOption;
-
-    // Full GS Paper I → 100 Qs, GS marking
-    const isFullGS     = subjectName === 'Full GS (Paper I)';
     const isCSAT       = subjectName === 'CSAT';
     const marksPerQ    = isCSAT ? 2.5 : 2;
     const negativePerQ = isCSAT ? 2.5 / 3 : 2 / 3;
-    const defaultQs    = isFullGS ? 100 : isCSAT ? 80 : 50;
 
-    // Set default questions when subject changes
     const handleSubjectChange = (val) => {
         setSelectedOption(val);
         if (val !== '__custom__') setCustomSubjectName('');
-        const sub = val;
-        if (sub === 'Full GS (Paper I)') setTotalQuestions(100);
-        else if (sub === 'CSAT') setTotalQuestions(80);
-        else setTotalQuestions(50);
+        setTotalQuestions(val === 'CSAT' ? 80 : 50);
     };
 
     const subStats = recoverStats(
@@ -309,9 +299,7 @@ export default function Calculator({ onSave, onUpdate, initialData, onCancelEdit
                         </div>
 
                         <div className="subject-pill" style={{ background: subStyle.bg, color: subStyle.color }}>
-                            {subjectName === 'AMAC'               ? 'Ancient · Medieval · Art & Culture' :
-                             subjectName === 'Full GS (Paper I)'  ? 'Full Syllabus · GS Paper I · 100 Qs' :
-                             subjectName}
+                            {subjectName === 'AMAC' ? 'Ancient · Medieval · Art & Culture' : subjectName}
                             {isCSAT   && ' · Qualifying Paper'}
                             {isCustomMode && ' · Custom Subject'}
                         </div>
