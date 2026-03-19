@@ -6,7 +6,7 @@ import {
 import { TrendingUp, Award, Activity, BookOpen, AlertTriangle, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import '../App.css';
-import { SUBJECTS, GS_SUBJECTS, SUBJECT_COLORS, normaliseSub } from './Calculator';
+import { SUBJECTS, SUBJECT_COLORS, normaliseSub } from './Calculator';
 
 export default function Dashboard({ data }) {
     const { tests } = data;
@@ -17,7 +17,6 @@ export default function Dashboard({ data }) {
     const subjectTests = useMemo(() =>
         tests.filter(t => t.type === 'SUBJECT_TEST'), [tests]);
 
-    // Normalise legacy subject names in stored data
     const normalisedSubjectTests = useMemo(() =>
         subjectTests.map(t => ({ ...t, subject: normaliseSub(t.subject) })),
         [subjectTests]);
@@ -31,36 +30,19 @@ export default function Dashboard({ data }) {
 
     // Mock trend
     const trendData = fullMocks.map((t, i) => ({
-        name: `Test ${i + 1}`,
+        name: `Mock ${i + 1}`,
         date: format(new Date(t.date), 'MMM d'),
         score: parseFloat(t.p1Score.toFixed(2)),
     }));
 
-    // Per-subject aggregation — combine subject tests + full mock breakdowns
+    // Per-subject aggregation
     const subjectPerformance = useMemo(() => {
         const grouped = {};
-
-        // From standalone subject tests
         normalisedSubjectTests.forEach(t => {
             if (!grouped[t.subject]) grouped[t.subject] = { total: 0, count: 0 };
             grouped[t.subject].total += t.score;
             grouped[t.subject].count += 1;
         });
-
-        // From full mock subject breakdowns
-        fullMocks.forEach(mock => {
-            if (!mock.subjectBreakdown) return;
-            GS_SUBJECTS.forEach(sub => {
-                const bd = mock.subjectBreakdown[sub];
-                if (!bd) return;
-                const score = Math.max(0, bd.correct * 2 - bd.incorrect * (2 / 3));
-                if (bd.correct === 0 && bd.incorrect === 0) return; // skip blank rows
-                if (!grouped[sub]) grouped[sub] = { total: 0, count: 0 };
-                grouped[sub].total += score;
-                grouped[sub].count += 1;
-            });
-        });
-
         return SUBJECTS.map(sub => {
             const g = grouped[sub];
             return {
@@ -72,7 +54,7 @@ export default function Dashboard({ data }) {
                 bg: (SUBJECT_COLORS[sub] || {}).bg || 'rgba(148,163,184,0.15)',
             };
         });
-    }, [normalisedSubjectTests, fullMocks]);
+    }, [normalisedSubjectTests]);
 
     const coveredSubjects = subjectPerformance.filter(s => s.covered && s.name !== 'CSAT');
     const weakSubjects    = coveredSubjects.filter(s => s.avg < 40);
@@ -165,7 +147,10 @@ export default function Dashboard({ data }) {
                 <div className="subject-score-grid">
                     {subjectPerformance.map(s => (
                         <div key={s.name} className={`subj-card ${!s.covered ? 'subj-card-empty' : ''}`}
-                            style={{ borderColor: s.color + (s.covered ? '66' : '22'), background: s.covered ? s.bg : 'rgba(255,255,255,0.02)' }}>
+                            style={{
+                                borderColor: s.color + (s.covered ? '66' : '22'),
+                                background: s.covered ? s.bg : 'rgba(255,255,255,0.02)',
+                            }}>
                             <div className="subj-name" style={{ color: s.covered ? s.color : s.color + '55' }}>
                                 {s.name}
                             </div>
@@ -183,7 +168,7 @@ export default function Dashboard({ data }) {
             {/* ── Mock Trend ── */}
             {fullMocks.length > 0 && (
                 <section className="chart-section glass-card">
-                    <h3>GS Paper I Performance Trend</h3>
+                    <h3>Full Mock — GS Paper I Trend</h3>
                     <div className="chart-wrapper">
                         <ResponsiveContainer width="100%" height={280}>
                             <AreaChart data={trendData}>
@@ -211,13 +196,13 @@ export default function Dashboard({ data }) {
             {/* ── Subject Bar Chart ── */}
             {subjectPerformance.some(s => s.covered) && (
                 <section className="chart-section glass-card">
-                    <h3>Subject-wise Average Score <span style={{fontSize:'0.75rem', color:'#9ca3af', fontWeight:400}}>(across all tests)</span></h3>
+                    <h3>Subject-wise Average Score</h3>
                     <div className="chart-wrapper">
                         <ResponsiveContainer width="100%" height={280}>
                             <BarChart data={subjectPerformance.filter(s => s.covered)}
                                 margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                                <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 12 }} />
+                                <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
                                 <YAxis stroke="#9ca3af" />
                                 <Tooltip
                                     cursor={{ fill: 'rgba(255,255,255,0.05)' }}
@@ -231,44 +216,6 @@ export default function Dashboard({ data }) {
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
-                    </div>
-                </section>
-            )}
-
-            {/* ── Per-Mock Subject Breakdown ── */}
-            {fullMocks.some(m => m.subjectBreakdown) && (
-                <section className="chart-section glass-card">
-                    <h3>Mock-wise Subject Breakdown</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
-                        {fullMocks.map((mock, idx) => {
-                            if (!mock.subjectBreakdown) return null;
-                            return (
-                                <div key={mock.date || idx} className="mock-breakdown-row">
-                                    <div className="mock-breakdown-label">
-                                        <span className="mock-num">Mock {fullMocks.length - idx}</span>
-                                        <span className="mock-date">{format(new Date(mock.date), 'MMM d, yyyy')}</span>
-                                        <span className="mock-total" style={{ color: '#ca8a04' }}>{mock.p1Score?.toFixed(1)} pts</span>
-                                    </div>
-                                    <div className="mock-sub-bars">
-                                        {GS_SUBJECTS.map(sub => {
-                                            const bd = mock.subjectBreakdown[sub] || { correct: 0, incorrect: 0 };
-                                            const score = Math.max(0, bd.correct * 2 - bd.incorrect * (2 / 3));
-                                            const style = SUBJECT_COLORS[sub];
-                                            return (
-                                                <div key={sub} className="mock-sub-item">
-                                                    <span className="mock-sub-name" style={{ color: style.color }}>{sub}</span>
-                                                    <div className="mock-sub-bar-bg">
-                                                        <div className="mock-sub-bar-fill"
-                                                            style={{ width: `${Math.min((score / 40) * 100, 100)}%`, background: style.color }} />
-                                                    </div>
-                                                    <span className="mock-sub-val">{score.toFixed(1)}</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            );
-                        })}
                     </div>
                 </section>
             )}
